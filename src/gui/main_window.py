@@ -4,6 +4,7 @@ from pathlib import Path
 from PyQt6.QtCore import QRect, Qt, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import (
+    QComboBox,
     QDoubleSpinBox,
     QFileDialog,
     QHBoxLayout,
@@ -150,16 +151,34 @@ class MainWindow(QMainWindow):
         self.save_button.setEnabled(False)
         controls_layout.addWidget(self.save_button)
 
+        # Effect selection
+        self.effect_combo = QComboBox()
+        self.effect_combo.addItems(["Blur", "Pixelate"])
+        controls_layout.addWidget(QLabel('Effect:'))
+        controls_layout.addWidget(self.effect_combo)
+
         # Blur controls
         self.blur_radius = QDoubleSpinBox()
         self.blur_radius.setRange(0, 100)
-        self.blur_radius.setValue(5.0)
-        self.blur_radius.setSingleStep(0.5)
+        self.blur_radius.setValue(25.0)
+        self.blur_radius.setSingleStep(5)
         controls_layout.addWidget(QLabel('Blur Radius:'))
         controls_layout.addWidget(self.blur_radius)
 
-        self.apply_blur_button = QPushButton('Apply Blur')
-        self.apply_blur_button.clicked.connect(self.apply_blur)
+        # Pixelate controls
+        self.pixel_size = QSpinBox()
+        self.pixel_size.setRange(2, 100)
+        self.pixel_size.setValue(10)
+        self.pixel_size.setSingleStep(2)
+        self.pixel_size.setEnabled(False)
+        controls_layout.addWidget(QLabel('Pixel Size:'))
+        controls_layout.addWidget(self.pixel_size)
+
+        # Enable/disable controls based on effect
+        self.effect_combo.currentTextChanged.connect(self._on_effect_changed)
+
+        self.apply_blur_button = QPushButton('Apply Effect')
+        self.apply_blur_button.clicked.connect(self.apply_effect)
         self.apply_blur_button.setEnabled(False)
         controls_layout.addWidget(self.apply_blur_button)
 
@@ -170,6 +189,39 @@ class MainWindow(QMainWindow):
         controls_layout.addWidget(self.reset_button)
 
         layout.addLayout(controls_layout)
+
+    def _on_effect_changed(self, effect):
+        if effect == "Blur":
+            self.blur_radius.setEnabled(True)
+            self.pixel_size.setEnabled(False)
+        elif effect == "Pixelate":
+            self.blur_radius.setEnabled(False)
+            self.pixel_size.setEnabled(True)
+
+    def apply_effect(self):
+        selection = self.image_viewer.get_selection_rect()
+        if selection:
+            try:
+                current_image = self.image_processor.get_current_image()
+                if current_image is None:
+                    QMessageBox.warning(self, "Warning", "No image loaded!")
+                    return
+                image_size = current_image.size
+                region = self.image_viewer.get_selection_image_coords(image_size)
+                if not region:
+                    QMessageBox.warning(self, "Warning", "Please select a valid region!")
+                    return
+                effect = self.effect_combo.currentText()
+                if effect == "Blur":
+                    if self.image_processor.apply_blur(region, self.blur_radius.value()):
+                        self.image_viewer.set_image(self.image_processor.get_current_image())
+                elif effect == "Pixelate":
+                    if self.image_processor.pixelate_region(region, self.pixel_size.value()):
+                        self.image_viewer.set_image(self.image_processor.get_current_image())
+            except ImageProcessingError as e:
+                QMessageBox.critical(self, "Error", str(e))
+        else:
+            QMessageBox.warning(self, "Warning", "Please select a region first!")
 
     def open_image(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -201,27 +253,6 @@ class MainWindow(QMainWindow):
                     QMessageBox.information(self, "Success", "Image saved successfully!")
             except ImageProcessingError as e:
                 QMessageBox.critical(self, "Error", str(e))
-
-    def apply_blur(self):
-        selection = self.image_viewer.get_selection_rect()
-        if selection:
-            try:
-                # Get image size from the current image
-                current_image = self.image_processor.get_current_image()
-                if current_image is None:
-                    QMessageBox.warning(self, "Warning", "No image loaded!")
-                    return
-                image_size = current_image.size
-                region = self.image_viewer.get_selection_image_coords(image_size)
-                if not region:
-                    QMessageBox.warning(self, "Warning", "Please select a valid region!")
-                    return
-                if self.image_processor.apply_blur(region, self.blur_radius.value()):
-                    self.image_viewer.set_image(self.image_processor.get_current_image())
-            except ImageProcessingError as e:
-                QMessageBox.critical(self, "Error", str(e))
-        else:
-            QMessageBox.warning(self, "Warning", "Please select a region first!")
 
     def reset_image(self):
         try:

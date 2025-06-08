@@ -2,6 +2,7 @@ import os
 from typing import Optional, Tuple
 
 import PIL.Image
+import PIL.Image as pil_image
 import PIL.ImageFilter
 
 
@@ -108,3 +109,21 @@ class ImageProcessor:
 
         self._current_image = self._original_image.copy()
         return True
+
+    def pixelate_region(self, region: Tuple[int, int, int, int], pixel_size: int) -> bool:
+        """Pixelates a specific region with the given pixel size."""
+        if not self._validate_region(region):
+            return False
+        if pixel_size <= 1:
+            raise ValueError("Pixel size must be greater than 1")
+        try:
+            working_img = self._current_image.copy()
+            sub_region = working_img.crop(region)
+            w, h = sub_region.size
+            small = sub_region.resize((max(1, w // pixel_size), max(1, h // pixel_size)), resample=PIL.Image.Resampling.NEAREST)
+            pixelated = small.resize((w, h), resample=PIL.Image.Resampling.NEAREST)
+            working_img.paste(pixelated, region)
+            self._current_image = working_img
+            return True
+        except Exception as e:
+            raise ImageProcessingError(f"Error applying pixelation: {e}")
