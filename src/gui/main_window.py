@@ -73,6 +73,41 @@ class ImageViewer(QLabel):
     def get_selection_rect(self):
         return self._current_selection_rect
 
+    def get_selection_image_coords(self, image_size):
+        """
+        Map the selection rectangle from widget coordinates to image coordinates.
+        image_size: (width, height) tuple of the original image
+        Returns (left, upper, right, lower) in image coordinates, or None if not available.
+        """
+        rect = self._current_selection_rect
+        if rect is None or rect.isNull() or not self.pixmap():
+            return None
+        img_w, img_h = image_size
+        widget_w, widget_h = self.width(), self.height()
+        pixmap = self.pixmap()
+        pm_w, pm_h = pixmap.width(), pixmap.height()
+        # Calculate scale factor and padding (centered image)
+        scale = min(widget_w / img_w, widget_h / img_h)
+        disp_w, disp_h = img_w * scale, img_h * scale
+        pad_x = (widget_w - disp_w) / 2
+        pad_y = (widget_h - disp_h) / 2
+        # Map widget coords to image coords
+        x1 = int((rect.left() - pad_x) / scale)
+        y1 = int((rect.top() - pad_y) / scale)
+        x2 = int((rect.right() - pad_x) / scale)
+        y2 = int((rect.bottom() - pad_y) / scale)
+        # Clamp to image bounds
+        x1 = max(0, min(x1, img_w-1))
+        y1 = max(0, min(y1, img_h-1))
+        x2 = max(0, min(x2, img_w))
+        y2 = max(0, min(y2, img_h))
+        # Ensure left < right, top < bottom
+        left, right = sorted([x1, x2])
+        top, bottom = sorted([y1, y2])
+        if left == right or top == bottom:
+            return None
+        return (left, top, right, bottom)
+
     def paintEvent(self, event):
         super().paintEvent(event)
         if self._current_selection_rect and not self._current_selection_rect.isNull():
@@ -171,12 +206,16 @@ class MainWindow(QMainWindow):
         selection = self.image_viewer.get_selection_rect()
         if selection:
             try:
-                region = (
-                    selection.x(),
-                    selection.y(),
-                    selection.x() + selection.width(),
-                    selection.y() + selection.height()
-                )
+                # Get image size from the current image
+                current_image = self.image_processor.get_current_image()
+                if current_image is None:
+                    QMessageBox.warning(self, "Warning", "No image loaded!")
+                    return
+                image_size = current_image.size
+                region = self.image_viewer.get_selection_image_coords(image_size)
+                if not region:
+                    QMessageBox.warning(self, "Warning", "Please select a valid region!")
+                    return
                 if self.image_processor.apply_blur(region, self.blur_radius.value()):
                     self.image_viewer.set_image(self.image_processor.get_current_image())
             except ImageProcessingError as e:
