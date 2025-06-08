@@ -1,8 +1,8 @@
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QRect, Qt, pyqtSignal
-from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, QRect, QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QIcon, QImage, QPixmap
 from PyQt6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
@@ -123,80 +123,154 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.image_processor = ImageProcessor()
+        self.sidebar_visible = True
         self.init_ui()
 
     def init_ui(self):
         self.setWindowTitle('Blurrify - Image Processor')
         self.setMinimumSize(800, 600)
 
-        # Create central widget and layout
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        layout = QVBoxLayout(central_widget)
+        # Main layout
+        main_widget = QWidget()
+        main_layout = QHBoxLayout(main_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        self.setCentralWidget(main_widget)
 
-        # Create image viewer
+        # Create two sidebars - expanded and collapsed
+        self.expanded_sidebar = self.create_expanded_sidebar()
+        self.collapsed_sidebar = self.create_collapsed_sidebar()
+
+        # Initially show expanded sidebar
+        self.collapsed_sidebar.hide()
+
+        # Add sidebars and image viewer to main layout
+        main_layout.addWidget(self.expanded_sidebar)
+        main_layout.addWidget(self.collapsed_sidebar)
+
+        # Image viewer
         self.image_viewer = ImageViewer()
-        layout.addWidget(self.image_viewer)
+        main_layout.addWidget(self.image_viewer, stretch=1)
 
-        # Create controls
-        controls_layout = QHBoxLayout()
+        # Animation for expanded sidebar
+        self.sidebar_anim = QPropertyAnimation(self.expanded_sidebar, b"maximumWidth")
+        self.sidebar_anim.setDuration(250)
+        self.sidebar_anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
 
-        # File operations
+    def create_expanded_sidebar(self):
+        sidebar = QWidget()
+        sidebar.setMaximumWidth(260)
+        layout = QVBoxLayout(sidebar)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Burger button
+        self.burger_button = QPushButton("☰")
+        self.burger_button.setFixedSize(32, 32)
+        self.burger_button.setStyleSheet("font-size: 22px; border: none; background: none;")
+        self.burger_button.clicked.connect(self.toggle_sidebar)
+        layout.addWidget(self.burger_button, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        # File operations with icons
         self.open_button = QPushButton('Open Image')
+        self.open_button.setIcon(QIcon("assets/open.png"))
         self.open_button.clicked.connect(self.open_image)
-        controls_layout.addWidget(self.open_button)
+        layout.addWidget(self.open_button)
 
         self.save_button = QPushButton('Save Image')
+        self.save_button.setIcon(QIcon("assets/save.png"))
         self.save_button.clicked.connect(self.save_image)
         self.save_button.setEnabled(False)
-        controls_layout.addWidget(self.save_button)
+        layout.addWidget(self.save_button)
 
         # Effect selection
+        layout.addWidget(QLabel('Effect:'))
         self.effect_combo = QComboBox()
         self.effect_combo.addItems(["Blur", "Pixelate"])
-        controls_layout.addWidget(QLabel('Effect:'))
-        controls_layout.addWidget(self.effect_combo)
+        self.effect_combo.currentTextChanged.connect(self._on_effect_changed)
+        layout.addWidget(self.effect_combo)
 
         # Blur controls
-        self.blur_radius = QDoubleSpinBox()
-        self.blur_radius.setRange(0, 100)
-        self.blur_radius.setValue(25.0)
-        self.blur_radius.setSingleStep(5)
-        controls_layout.addWidget(QLabel('Blur Radius:'))
-        controls_layout.addWidget(self.blur_radius)
+        layout.addWidget(QLabel('Blur Radius:'))
+        self.blur_combo = QComboBox()
+        blur_values = [str(i) for i in range(0, 105, 5)]
+        self.blur_combo.addItems(blur_values)
+        self.blur_combo.setCurrentText("50")
+        layout.addWidget(self.blur_combo)
 
         # Pixelate controls
-        self.pixel_size = QSpinBox()
-        self.pixel_size.setRange(2, 100)
-        self.pixel_size.setValue(10)
-        self.pixel_size.setSingleStep(2)
-        self.pixel_size.setEnabled(False)
-        controls_layout.addWidget(QLabel('Pixel Size:'))
-        controls_layout.addWidget(self.pixel_size)
+        layout.addWidget(QLabel('Pixel Size:'))
+        self.pixel_combo = QComboBox()
+        pixel_values = [str(i) for i in range(5, 105, 5)]
+        self.pixel_combo.addItems(pixel_values)
+        self.pixel_combo.setCurrentText("50")
+        self.pixel_combo.setEnabled(False)
+        layout.addWidget(self.pixel_combo)
 
-        # Enable/disable controls based on effect
-        self.effect_combo.currentTextChanged.connect(self._on_effect_changed)
+        # Apply and Reset buttons
+        self.apply_button = QPushButton('Apply Effect')
+        self.apply_button.setIcon(QIcon("assets/apply.png"))
+        self.apply_button.clicked.connect(self.apply_effect)
+        self.apply_button.setEnabled(False)
+        layout.addWidget(self.apply_button)
 
-        self.apply_blur_button = QPushButton('Apply Effect')
-        self.apply_blur_button.clicked.connect(self.apply_effect)
-        self.apply_blur_button.setEnabled(False)
-        controls_layout.addWidget(self.apply_blur_button)
-
-        # Reset button
         self.reset_button = QPushButton('Reset')
+        self.reset_button.setIcon(QIcon("assets/reset.png"))
         self.reset_button.clicked.connect(self.reset_image)
         self.reset_button.setEnabled(False)
-        controls_layout.addWidget(self.reset_button)
+        layout.addWidget(self.reset_button)
 
-        layout.addLayout(controls_layout)
+        layout.addStretch()
+        return sidebar
+
+    def create_collapsed_sidebar(self):
+        sidebar = QWidget()
+        sidebar.setFixedWidth(60)
+        layout = QVBoxLayout(sidebar)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Burger button (always visible)
+        burger = QPushButton("☰")
+        burger.setFixedSize(32, 32)
+        burger.setStyleSheet("font-size: 22px; border: none; background: none;")
+        burger.clicked.connect(self.toggle_sidebar)
+        layout.addWidget(burger, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        # Icon-only buttons
+        for icon_name, slot, tooltip in [
+            ("open.png", self.open_image, "Open Image"),
+            ("save.png", self.save_image, "Save Image"),
+            ("apply.png", self.apply_effect, "Apply Effect"),
+            ("reset.png", self.reset_image, "Reset")
+        ]:
+            btn = QPushButton()
+            btn.setIcon(QIcon(f"assets/{icon_name}"))
+            btn.setIconSize(QSize(32, 32))
+            btn.setFixedSize(40, 40)
+            btn.setToolTip(tooltip)
+            btn.clicked.connect(slot)
+            btn.setStyleSheet("border: none; background: none;")
+            layout.addWidget(btn)
+
+        layout.addStretch()
+        return sidebar
+
+    def toggle_sidebar(self):
+        if self.sidebar_visible:
+            self.expanded_sidebar.hide()
+            self.collapsed_sidebar.show()
+        else:
+            self.expanded_sidebar.show()
+            self.collapsed_sidebar.hide()
+        self.sidebar_visible = not self.sidebar_visible
 
     def _on_effect_changed(self, effect):
         if effect == "Blur":
-            self.blur_radius.setEnabled(True)
-            self.pixel_size.setEnabled(False)
+            self.blur_combo.setEnabled(True)
+            self.pixel_combo.setEnabled(False)
         elif effect == "Pixelate":
-            self.blur_radius.setEnabled(False)
-            self.pixel_size.setEnabled(True)
+            self.blur_combo.setEnabled(False)
+            self.pixel_combo.setEnabled(True)
 
     def apply_effect(self):
         selection = self.image_viewer.get_selection_rect()
@@ -213,10 +287,12 @@ class MainWindow(QMainWindow):
                     return
                 effect = self.effect_combo.currentText()
                 if effect == "Blur":
-                    if self.image_processor.apply_blur(region, self.blur_radius.value()):
+                    radius = int(self.blur_combo.currentText())
+                    if self.image_processor.apply_blur(region, radius):
                         self.image_viewer.set_image(self.image_processor.get_current_image())
                 elif effect == "Pixelate":
-                    if self.image_processor.pixelate_region(region, self.pixel_size.value()):
+                    pixel_size = int(self.pixel_combo.currentText())
+                    if self.image_processor.pixelate_region(region, pixel_size):
                         self.image_viewer.set_image(self.image_processor.get_current_image())
             except ImageProcessingError as e:
                 QMessageBox.critical(self, "Error", str(e))
@@ -235,7 +311,7 @@ class MainWindow(QMainWindow):
                 if self.image_processor.open_image(file_path):
                     self.image_viewer.set_image(self.image_processor.get_current_image())
                     self.save_button.setEnabled(True)
-                    self.apply_blur_button.setEnabled(True)
+                    self.apply_button.setEnabled(True)
                     self.reset_button.setEnabled(True)
             except ImageProcessingError as e:
                 QMessageBox.critical(self, "Error", str(e))
