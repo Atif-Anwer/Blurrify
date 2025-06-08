@@ -1,5 +1,6 @@
-Pillow>=10.0.0  # For image processing
-PyQt6>=6.5.0    # For GUI
+PyQt6==6.6.1
+Pillow==10.1.0
+cx-Freeze==6.15.12
 pytest>=7.0.0   # For testing
 black>=23.0.0   # For code formatting
 flake8>=6.0.0   # For linting
