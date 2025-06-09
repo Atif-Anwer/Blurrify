@@ -5,10 +5,12 @@ from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, QRect, QSize, Qt, pyq
 from PyQt6.QtGui import QIcon, QImage, QPixmap
 from PyQt6.QtWidgets import (
     QComboBox,
+    QDial,
     QDoubleSpinBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
+    QLCDNumber,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -57,13 +59,13 @@ class ImageViewer(QLabel):
             self.update()
 
     def mouseMoveEvent(self, event):
-        if self._is_selecting and self.pixmap():
+        if self._is_selecting and self.pixmap() and self._selection_start is not None:
             self._selection_end = event.pos()
             self._current_selection_rect = QRect(self._selection_start, self._selection_end).normalized()
             self.update()
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton and self.pixmap():
+        if event.button() == Qt.MouseButton.LeftButton and self.pixmap() and self._selection_start is not None:
             self._is_selecting = False
             self._selection_end = event.pos()
             self._current_selection_rect = QRect(self._selection_start, self._selection_end).normalized()
@@ -111,7 +113,7 @@ class ImageViewer(QLabel):
 
     def paintEvent(self, event):
         super().paintEvent(event)
-        if self._current_selection_rect and not self._current_selection_rect.isNull():
+        if self._current_selection_rect is not None and not self._current_selection_rect.isNull():
             from PyQt6.QtGui import QColor, QPainter, QPen
             painter = QPainter(self)
             pen = QPen(QColor(255, 0, 0, 180), 2, Qt.PenStyle.DashLine)
@@ -159,9 +161,11 @@ class MainWindow(QMainWindow):
     def create_expanded_sidebar(self):
         sidebar = QWidget()
         sidebar.setMaximumWidth(260)
+        sidebar.setMinimumWidth(220)
         layout = QVBoxLayout(sidebar)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
 
         # Burger button
         self.burger_button = QPushButton("☰")
@@ -170,51 +174,186 @@ class MainWindow(QMainWindow):
         self.burger_button.clicked.connect(self.toggle_sidebar)
         layout.addWidget(self.burger_button, alignment=Qt.AlignmentFlag.AlignLeft)
 
-        # File operations with icons
-        self.open_button = QPushButton('Open Image')
-        self.open_button.setIcon(QIcon("assets/open.png"))
+        # Load Image button (large)
+        self.open_button = QPushButton('Load Image')
+        self.open_button.setMinimumSize(200, 100)
+        self.open_button.setStyleSheet("""
+            QPushButton {
+                font-size: 16px;
+                font-weight: bold;
+                background-color: #3A3A3A;
+                color: white;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #4A4A4A;
+            }
+        """)
         self.open_button.clicked.connect(self.open_image)
         layout.addWidget(self.open_button)
 
+                # Dial controls section
+        dials_layout = QHBoxLayout()
+
+        # Blur dial
+        blur_layout = QVBoxLayout()
+        blur_layout.addWidget(QLabel('Blur Radius:'))
+        self.blur_dial = QDial()
+        self.blur_dial.setMinimum(0)
+        self.blur_dial.setMaximum(100)
+        self.blur_dial.setValue(50)
+        self.blur_dial.setFixedSize(100, 100)
+        self.blur_dial.setNotchesVisible(True)  # Show dial marks
+        blur_layout.addWidget(self.blur_dial)
+
+        # LCD display for blur value
+        self.blur_lcd = QLCDNumber(3)  # 3 digits
+        self.blur_lcd.setFixedSize(80, 30)
+        self.blur_lcd.display(50)  # Initial value
+        self.blur_lcd.setStyleSheet("""
+            QLCDNumber {
+                background-color: #2A2A2A;
+                color: #00FF00;
+                border: 1px solid #555555;
+                border-radius: 3px;
+            }
+        """)
+        blur_layout.addWidget(self.blur_lcd)
+
+        # Connect blur dial to LCD
+        self.blur_dial.valueChanged.connect(self.blur_lcd.display)
+
+        # Pixelate dial
+        pixel_layout = QVBoxLayout()
+        pixel_layout.addWidget(QLabel('Pixel Size:'))
+        self.pixel_dial = QDial()
+        self.pixel_dial.setMinimum(5)
+        self.pixel_dial.setMaximum(100)
+        self.pixel_dial.setValue(50)
+        self.pixel_dial.setFixedSize(100, 100)
+        self.pixel_dial.setNotchesVisible(True)  # Show dial marks
+        self.pixel_dial.setEnabled(True)
+        pixel_layout.addWidget(self.pixel_dial)
+
+        # LCD display for pixel value
+        self.pixel_lcd = QLCDNumber(3)  # 3 digits
+        self.pixel_lcd.setFixedSize(80, 30)
+        self.pixel_lcd.display(50)  # Initial value
+        self.pixel_lcd.setStyleSheet("""
+            QLCDNumber {
+                background-color: #2A2A2A;
+                color: #00FF00;
+                border: 1px solid #555555;
+                border-radius: 3px;
+            }
+        """)
+        pixel_layout.addWidget(self.pixel_lcd)
+
+        # Connect pixel dial to LCD
+        self.pixel_dial.valueChanged.connect(self.pixel_lcd.display)
+
+        dials_layout.addLayout(blur_layout)
+        dials_layout.addLayout(pixel_layout)
+        layout.addLayout(dials_layout)
+
+        # Effect buttons section
+        effects_layout = QHBoxLayout()
+
+        # Apply Blur button
+        self.apply_blur_button = QPushButton('Apply Blur')
+        self.apply_blur_button.setMinimumSize(95, 80)
+        self.apply_blur_button.setStyleSheet("""
+            QPushButton {
+                font-size: 12px;
+                font-weight: bold;
+                background-color: #3A3A3A;
+                color: white;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #4A4A4A;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        self.apply_blur_button.clicked.connect(lambda: self.apply_effect_type("Blur"))
+        self.apply_blur_button.setEnabled(False)
+
+        # Apply Pixelation button
+        self.apply_pixel_button = QPushButton('Apply Pixelation')
+        self.apply_pixel_button.setMinimumSize(95, 80)
+        self.apply_pixel_button.setStyleSheet("""
+            QPushButton {
+                font-size: 12px;
+                font-weight: bold;
+                background-color: #3A3A3A;
+                color: white;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #4A4A4A;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        self.apply_pixel_button.clicked.connect(lambda: self.apply_effect_type("Pixelate"))
+        self.apply_pixel_button.setEnabled(False)
+
+        effects_layout.addWidget(self.apply_blur_button)
+        effects_layout.addWidget(self.apply_pixel_button)
+        layout.addLayout(effects_layout)
+
+        # Save Image button (large)
         self.save_button = QPushButton('Save Image')
-        self.save_button.setIcon(QIcon("assets/save.png"))
+        self.save_button.setMinimumSize(200, 120)
+        self.save_button.setStyleSheet("""
+            QPushButton {
+                font-size: 16px;
+                font-weight: bold;
+                background-color: #3A3A3A;
+                color: white;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #4A4A4A;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
         self.save_button.clicked.connect(self.save_image)
         self.save_button.setEnabled(False)
         layout.addWidget(self.save_button)
 
-        # Effect selection
-        layout.addWidget(QLabel('Effect:'))
-        self.effect_combo = QComboBox()
-        self.effect_combo.addItems(["Blur", "Pixelate"])
-        self.effect_combo.currentTextChanged.connect(self._on_effect_changed)
-        layout.addWidget(self.effect_combo)
-
-        # Blur controls
-        layout.addWidget(QLabel('Blur Radius:'))
-        self.blur_combo = QComboBox()
-        blur_values = [str(i) for i in range(0, 105, 5)]
-        self.blur_combo.addItems(blur_values)
-        self.blur_combo.setCurrentText("50")
-        layout.addWidget(self.blur_combo)
-
-        # Pixelate controls
-        layout.addWidget(QLabel('Pixel Size:'))
-        self.pixel_combo = QComboBox()
-        pixel_values = [str(i) for i in range(5, 105, 5)]
-        self.pixel_combo.addItems(pixel_values)
-        self.pixel_combo.setCurrentText("50")
-        self.pixel_combo.setEnabled(False)
-        layout.addWidget(self.pixel_combo)
-
-        # Apply and Reset buttons
-        self.apply_button = QPushButton('Apply Effect')
-        self.apply_button.setIcon(QIcon("assets/apply.png"))
-        self.apply_button.clicked.connect(self.apply_effect)
-        self.apply_button.setEnabled(False)
-        layout.addWidget(self.apply_button)
-
-        self.reset_button = QPushButton('Reset')
-        self.reset_button.setIcon(QIcon("assets/reset.png"))
+        # Reset Image button (large)
+        self.reset_button = QPushButton('Reset Image')
+        self.reset_button.setMinimumSize(200, 120)
+        self.reset_button.setStyleSheet("""
+            QPushButton {
+                font-size: 16px;
+                font-weight: bold;
+                background-color: #3A3A3A;
+                color: white;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #4A4A4A;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
         self.reset_button.clicked.connect(self.reset_image)
         self.reset_button.setEnabled(False)
         layout.addWidget(self.reset_button)
@@ -240,7 +379,7 @@ class MainWindow(QMainWindow):
         for icon_name, slot, tooltip in [
             ("open.png", self.open_image, "Open Image"),
             ("save.png", self.save_image, "Save Image"),
-            ("apply.png", self.apply_effect, "Apply Effect"),
+            ("apply.png", lambda: self.apply_effect_type("Blur"), "Apply Effect"),
             ("reset.png", self.reset_image, "Reset")
         ]:
             btn = QPushButton()
@@ -264,17 +403,10 @@ class MainWindow(QMainWindow):
             self.collapsed_sidebar.hide()
         self.sidebar_visible = not self.sidebar_visible
 
-    def _on_effect_changed(self, effect):
-        if effect == "Blur":
-            self.blur_combo.setEnabled(True)
-            self.pixel_combo.setEnabled(False)
-        elif effect == "Pixelate":
-            self.blur_combo.setEnabled(False)
-            self.pixel_combo.setEnabled(True)
-
-    def apply_effect(self):
+    def apply_effect_type(self, effect_type):
+        """Apply the specified effect type using the current dial values"""
         selection = self.image_viewer.get_selection_rect()
-        if selection:
+        if selection is not None and not selection.isNull():
             try:
                 current_image = self.image_processor.get_current_image()
                 if current_image is None:
@@ -285,19 +417,23 @@ class MainWindow(QMainWindow):
                 if not region:
                     QMessageBox.warning(self, "Warning", "Please select a valid region!")
                     return
-                effect = self.effect_combo.currentText()
-                if effect == "Blur":
-                    radius = int(self.blur_combo.currentText())
+
+                if effect_type == "Blur":
+                    radius = self.blur_dial.value()
                     if self.image_processor.apply_blur(region, radius):
                         self.image_viewer.set_image(self.image_processor.get_current_image())
-                elif effect == "Pixelate":
-                    pixel_size = int(self.pixel_combo.currentText())
+                elif effect_type == "Pixelate":
+                    pixel_size = max(5, self.pixel_dial.value())  # Ensure minimum value
                     if self.image_processor.pixelate_region(region, pixel_size):
                         self.image_viewer.set_image(self.image_processor.get_current_image())
             except ImageProcessingError as e:
                 QMessageBox.critical(self, "Error", str(e))
         else:
             QMessageBox.warning(self, "Warning", "Please select a region first!")
+
+    def apply_effect(self):
+        """Legacy method for backward compatibility"""
+        self.apply_effect_type("Blur")
 
     def open_image(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -311,7 +447,8 @@ class MainWindow(QMainWindow):
                 if self.image_processor.open_image(file_path):
                     self.image_viewer.set_image(self.image_processor.get_current_image())
                     self.save_button.setEnabled(True)
-                    self.apply_button.setEnabled(True)
+                    self.apply_blur_button.setEnabled(True)
+                    self.apply_pixel_button.setEnabled(True)
                     self.reset_button.setEnabled(True)
             except ImageProcessingError as e:
                 QMessageBox.critical(self, "Error", str(e))
