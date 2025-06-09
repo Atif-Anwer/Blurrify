@@ -4,8 +4,8 @@ from pathlib import Path
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
-from gui.main_window import MainWindow
-from gui.splash_screen import SplashScreen
+from src.gui.main_window import MainWindow
+from src.gui.splash_screen import SplashScreen
 
 
 def main():

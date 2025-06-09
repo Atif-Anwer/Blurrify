@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from core.image_processor import ImageProcessingError, ImageProcessor
+from src.core.image_processor import ImageProcessingError, ImageProcessor
 
 
 class ImageViewer(QLabel):
