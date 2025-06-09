@@ -1,6 +1,8 @@
 # Blurrify - Image Processing Application
 
-A desktop application for image processing built with Python, PIL, and PyQt6.
+A desktop application for blurring and pixelating selected image regions. Built with Python, PIL, and PyQt6.
+
+![Blurrify Screenshot](assets/screenshot.png)
 
 ## Features
 
