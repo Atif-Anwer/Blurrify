@@ -7,9 +7,9 @@ A desktop application for blurring and pixelating selected image regions. Built 
 ## Features
 
 - Open and view images (JPG, PNG)
-- Apply Gaussian blur to selected regions
-- Crop images
-- Save processed images
+- Select an region on the image
+- Apply Gaussian blur or pixelate to the selected region
+- Save the processed image.
 
 ## Installation
 
@@ -42,10 +42,7 @@ python src/main.py
 - `src/` - Source code
   - `core/` - Core image processing logic
   - `gui/` - PyQt GUI implementation
-  - `utils/` - Utility functions
-- `tests/` - Test files
-- `docs/` - Documentation
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the  GPL-3.0 license. 
